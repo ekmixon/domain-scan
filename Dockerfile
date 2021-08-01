@@ -1,6 +1,6 @@
 # VERSION 0.3.0
 
-FROM ubuntu:16.04
+FROM ubuntu:xenial-20210416
 MAINTAINER Shane Frasier <jeremy.frasier@trio.dhs.gov>
 
 ###
