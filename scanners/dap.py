@@ -12,13 +12,14 @@ scan_headless = True
 def init_domain(domain, environment, options):
     # To scan, we need a URL, not just a domain.
     url = None
-    if not (domain.startswith('http://') or domain.startswith('https://')):
-        url = 'https://' + domain
-    else:
-        url = domain
+    url = (
+        domain
+        if (domain.startswith('http://') or domain.startswith('https://'))
+        else f'https://{domain}'
+    )
 
     # Standardize by ending with a /.
-    url = url + "/"
+    url = f"{url}/"
 
     return {'url': url}
 

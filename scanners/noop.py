@@ -29,7 +29,7 @@ def init(environment: dict, options: dict) -> dict:
 #
 # Run locally.
 def init_domain(domain: str, environment: dict, options: dict) -> dict:
-    logging.debug("Init function for %s." % domain)
+    logging.debug(f"Init function for {domain}.")
     return {'variable': domain}
 
 
@@ -38,7 +38,7 @@ def init_domain(domain: str, environment: dict, options: dict) -> dict:
 #
 # Runs locally or in the cloud (Lambda).
 def scan(domain: str, environment: dict, options: dict) -> dict:
-    logging.debug("Scan function called with options: %s" % options)
+    logging.debug(f"Scan function called with options: {options}")
 
     # Perform the "task".
     complete = True

@@ -72,8 +72,6 @@ class Gatherer(Gatherer):
         if (cache is True) and os.path.exists(download_path):
             logging.warning("Using cached download data.")
 
-        # But by default, fetch new data from the BigQuery API,
-        # and write it to the expected download location.
         else:
             # Ensure cache destination exists.
             utils.mkdir_p(os.path.dirname(download_path))
@@ -98,19 +96,16 @@ class Gatherer(Gatherer):
             # the resulting CSV URL in results_url.
             logging.warning("Caching results of SQL query.")
 
-            download_file = open(download_path, 'w', newline='')
-            download_writer = csv.writer(download_file)
-            download_writer.writerow(["Domain"])  # will be skipped on read
+            with open(download_path, 'w', newline='') as download_file:
+                download_writer = csv.writer(download_file)
+                download_writer.writerow(["Domain"])  # will be skipped on read
 
-            # Parse the rows and write them out as they were returned (dupes
-            # and all), to be de-duped by the central gathering script.
-            for row in rows:
-                domains = row['common_name'] + row['dns_names']
-                for domain in domains:
-                    download_writer.writerow([domain])
-
-            # End CSV writing.
-            download_file.close()
+                # Parse the rows and write them out as they were returned (dupes
+                # and all), to be de-duped by the central gathering script.
+                for row in rows:
+                    domains = row['common_name'] + row['dns_names']
+                    for domain in domains:
+                        download_writer.writerow([domain])
 
         # Whether we downloaded it fresh or not, read from the cached data.
         for domain in utils.load_domains(download_path):
@@ -158,14 +153,10 @@ def query_for(suffixes: List[str]) -> str:
     # Join the individual suffix clauses into one WHERE clause.
     where = str.join("\n    OR ", [suffix_query(suffix) for suffix in suffixes])
 
-    query = "\n".join([
-        "SELECT",
-        select,
-        "FROM",
-        from_clause,
-        "WHERE",
-        "    %s" % where
-    ])
+    query = "\n".join(
+        ["SELECT", select, "FROM", from_clause, "WHERE", f"    {where}"]
+    )
+
 
     return query
 

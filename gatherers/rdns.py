@@ -44,8 +44,7 @@ class Gatherer(Gatherer):
         with open(path) as lines:
             logging.debug("\tReading %s..." % path)
 
-            for record in process_lines(lines, ip_filter, number_filter):
-                yield record
+            yield from process_lines(lines, ip_filter, number_filter)
 
 
 def process_lines(lines: List[str], ip_filter: Pattern,

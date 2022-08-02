@@ -79,11 +79,11 @@ def init(environment: dict, options: dict) -> dict:
 # that use the network or are otherwise expensive would go.
 # Runs locally or in the cloud (Lambda).
 def scan(domain: str, environment: dict, options: dict) -> dict:
-    logging.debug("Scan function called with options: %s" % options)
+    logging.debug(f"Scan function called with options: {options}")
 
     # Run sitemap_scan to capture that data
     sitemap_results = sitemap_scan(domain, environment, options)
-    fqd = "https://%s" % domain  # note lack of trailing slash
+    fqd = f"https://{domain}"
 
     if sitemap_results['status_code'] == HTTPStatus.OK:
         sitemap_status = "OK"
@@ -99,13 +99,16 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
         'Sitemaps from index': sitemap_results['sitemap_locations_from_index'],
         'Robots.txt': sitemap_results['robots'],
         'Crawl delay': sitemap_results['crawl_delay'],
-        'Sitemaps from robots': sitemap_results['sitemap_locations_from_robotstxt'],
-        'Total URLs': sitemap_results['url_tag_count'] if sitemap_results['url_tag_count'] else 0,
+        'Sitemaps from robots': sitemap_results[
+            'sitemap_locations_from_robotstxt'
+        ],
+        'Total URLs': sitemap_results['url_tag_count'] or 0,
         'Est time to index': 'Unknown',
         'Main tags found': False,
         'Search found': False,
         'Warnings': {},
     }
+
 
     # See if we can determine platforms used for the site
     build_info = builtwith(fqd)
@@ -139,7 +142,7 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
     descriptions = []
     for page in environment['pages']:
         try:
-            r = requests.get("https://" + domain + page, timeout=4)
+            r = requests.get(f"https://{domain}{page}", timeout=4)
             # if we didn't find the page, write minimal info and skip to next page
             if r.status_code != HTTPStatus.OK:
                 results[page] = '404'
@@ -156,8 +159,8 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
             dc_date = htmlsoup.select_one("meta[name='article:published_time']")
             if not dc_date:
                 dc_date = htmlsoup.select_one("meta[name='article:modified_time']")
-                if not dc_date:
-                    dc_date = htmlsoup.select_one("meta[name='DC.Date']")
+            if not dc_date:
+                dc_date = htmlsoup.select_one("meta[name='DC.Date']")
             # if we found one, grab the content
             if dc_date:
                 dc_date = dc_date['content']
@@ -165,18 +168,18 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
             # Find the main tag (or alternate), if we haven't found one already.
             # Potential TO-DO: check that there is only one. Necessary? ¯\_(ツ)_/¯
             if not results['Main tags found']:
-                maintag = True if htmlsoup.find('main') else False
+                maintag = bool(htmlsoup.find('main'))
                 # if we couldn't find `main` look for the corresponding role
                 if not maintag:
-                    maintag = True if htmlsoup.select('[role=main]') else False
+                    maintag = bool(htmlsoup.select('[role=main]'))
                 results['Main tags found'] = maintag
 
             # Look for a search form
             if not results['Search found']:
-                searchtag = True if htmlsoup.find("input", {"type": "search"}) else False
+                searchtag = bool(htmlsoup.find("input", {"type": "search"}))
                 # if we couldn't find `a search input` look for classes
                 if not searchtag:
-                    searchtag = True if htmlsoup.select('[class*="search"]') else False
+                    searchtag = bool(htmlsoup.select('[class*="search"]'))
                 results['Search found'] = searchtag
 
             # Now populate page info
@@ -187,7 +190,7 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
                     'date': dc_date
                 }
         except Exception as error:
-            results[page] = "Could not get data from %s%s: %s" % (domain, page, error)
+            results[page] = f"Could not get data from {domain}{page}: {error}"
 
     # now check for dupes
     if len(titles) != len(set(titles)):

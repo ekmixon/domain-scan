@@ -30,29 +30,22 @@ def init_domain(domain, environment, options):
 
     # requests needs a URL, not just a domain.
     url = None
-    if not (domain.startswith('http://') or domain.startswith('https://')):
-
-        # If we have data from pshtt, use the canonical endpoint.
-        if utils.domain_canonical(domain, cache_dir=cache_dir):
-            url = utils.domain_canonical(domain, cache_dir=cache_dir)
-
-        # Otherwise, well, ssl should work.
-        else:
-            url = 'https://' + domain
-    else:
-        url = domain
+    url = (
+        domain
+        if (domain.startswith('http://') or domain.startswith('https://'))
+        else utils.domain_canonical(domain, cache_dir=cache_dir)
+        or f'https://{domain}'
+    )
 
     return {'url': url}
 
 
 def scan(domain, environment, options):
-    logging.debug("CSP Check called with options: %s" % options)
+    logging.debug(f"CSP Check called with options: {options}")
     url = environment.get("url", domain)
     logging.debug("URL: %s", url)
     response = requests.get(url)
-    csp_set = False
-    if "content-security-policy" in response.headers:
-        csp_set = True
+    csp_set = "content-security-policy" in response.headers
     logging.warning("Complete!")
     return {
         'csp_set': csp_set

@@ -107,19 +107,17 @@ def scan(domain, environment, options):
 
 
 def to_rows(data):
-    rows = []
-
-    for error in data['errors']:
-        rows.append([
+    return [
+        [
             data['url'],
             error['typeCode'],
             error['code'],
             error['message'],
             error['context'],
-            error['selector']
-        ])
-
-    return rows
+            error['selector'],
+        ]
+        for error in data['errors']
+    ]
 
 
 headers = [
@@ -140,19 +138,20 @@ def run_a11y_scan(domain):
 
     raw = utils.scan(command)
 
-    if not raw or raw == '[]\n':
-        results = [{
-            'typeCode': '',
-            'code': '',
-            'message': '',
-            'context': '',
-            'selector': '',
-            'type': ''
-        }]
-    else:
-        results = json.loads(raw)
-
-    return results
+    return (
+        [
+            {
+                'typeCode': '',
+                'code': '',
+                'message': '',
+                'context': '',
+                'selector': '',
+                'type': '',
+            }
+        ]
+        if not raw or raw == '[]\n'
+        else json.loads(raw)
+    )
 
 
 def get_url_to_scan(domain):
@@ -163,14 +162,11 @@ def get_url_to_scan(domain):
     # Redirects can be blacklists or redirects.
     if domain in redirects:
         # blacklist will force a domain to be skipped
-        if redirects[domain]['blacklist']:
-            url_to_scan = None
-        # otherwise, scan will be redirected to new location
-        else:
-            url_to_scan = redirects[domain]['redirect']
+        return (
+            None
+            if redirects[domain]['blacklist']
+            else redirects[domain]['redirect']
+        )
 
-    # Otherwise, leave domain alone.
     else:
-        url_to_scan = domain
-
-    return url_to_scan
+        return domain

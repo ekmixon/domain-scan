@@ -71,19 +71,23 @@ def init_domain(domain, environment, options):
             # The NoNameServers exception means that we got a SERVFAIL
             # response.  These responses are almost always permanent,
             # not temporary, so let's treat the domain as not live.
-            logging.info('No MX records for domain {}: {}'.format(domain, error))
+            logging.info(f'No MX records for domain {domain}: {error}')
             mx_records = []
         except (dns.resolver.NoAnswer, dns.exception.Timeout) as error:
-            logging.warning('Encountered an error retrieving MX records for domain {}: {}.'.format(domain, error))
+            logging.warning(
+                f'Encountered an error retrieving MX records for domain {domain}: {error}.'
+            )
+
             mx_records = []
 
         # The rstrip is because dnspython's string representation of
         # the record will contain a trailing period if it is a FQDN.
         mail_servers_to_test = {
-            '{}:{}'.format(record.exchange.to_text().rstrip('.').lower(), port)
+            f"{record.exchange.to_text().rstrip('.').lower()}:{port}"
             for record in mx_records
             for port in smtp_ports
         }
+
         # Check if we already have results for all mail servers to be
         # tested, possibly from a different domain.
         #
@@ -97,12 +101,13 @@ def init_domain(domain, environment, options):
         #
         # Note that we only use the cached data if we have data for
         # _every_ mail server associated with this domain.
-        cached = FAST_CACHE_KEY in environment and all([
+        cached = FAST_CACHE_KEY in environment and all(
             mail_server in environment[FAST_CACHE_KEY]
             for mail_server in mail_servers_to_test
-        ])
+        )
+
         if cached:
-            logging.debug('Using cached data for {} mail servers'.format(domain))
+            logging.debug(f'Using cached data for {domain} mail servers')
             cached_data = {
                 mail_server: environment[FAST_CACHE_KEY][mail_server]
                 for mail_server in mail_servers_to_test
@@ -149,7 +154,7 @@ def scan(domain, environment, options):
     # If the user listed no specific scans then perform all scans.  It
     # is necessary to do this here in case use_cached_data is True and
     # we set scan_types['mx'] to True below.
-    if all([not scan_types[key] for key in scan_types]):
+    if all(not scan_types[key] for key in scan_types):
         for key in scan_types:
             scan_types[key] = True
 
@@ -232,12 +237,8 @@ def list_from_dict_key(d: dict, k: str, delim: str=',') -> List[str]:
     List[str]: The list extracted from the delimited string, or an
     empty list if the dictionary key is None or does not exist.
     """
-    ans = []
-    s = d.get(k, None)
-    if s is not None:
-        ans = s.split(',')
-
-    return ans
+    s = d.get(k)
+    return s.split(',') if s is not None else []
 
 
 def post_scan(domain: str, data: Any, environment: dict, options: dict):
@@ -267,39 +268,36 @@ def post_scan(domain: str, data: Any, environment: dict, options: dict):
 
     """
     # Make sure fast caching hasn't been disabled
-    if not options['no_fast_cache'] and data is not None:
-        if FAST_CACHE_KEY not in environment:
-            environment[FAST_CACHE_KEY] = {}
+    if options['no_fast_cache'] or data is None:
+        return
+    if FAST_CACHE_KEY not in environment:
+        environment[FAST_CACHE_KEY] = {}
 
-        servers = list_from_dict_key(data, 'Mail Servers')
-        ports = [
-            int(port) for port in list_from_dict_key(data,
-                                                     'Mail Server Ports Tested')
-        ]
-        smtp_results = list_from_dict_key(data,
-                                          'Domain Supports SMTP Results')
-        starttls_results = list_from_dict_key(data,
-                                              'Domain Supports STARTTLS Results')
+    servers = list_from_dict_key(data, 'Mail Servers')
+    ports = [
+        int(port) for port in list_from_dict_key(data,
+                                                 'Mail Server Ports Tested')
+    ]
+    smtp_results = list_from_dict_key(data,
+                                      'Domain Supports SMTP Results')
+    starttls_results = list_from_dict_key(data,
+                                          'Domain Supports STARTTLS Results')
 
-        fast_cache = environment[FAST_CACHE_KEY]
-        for server in servers:
-            for port in ports:
-                mail_server = '{}:{}'.format(server, port)
-                # Avoid overwriting the cached data if someone
-                # else wrote it while we were running
-                if mail_server not in fast_cache:
-                    fast_cache[mail_server] = {
-                        'supports_smtp': mail_server in smtp_results,
-                        'starttls': mail_server in starttls_results
-                    }
+    fast_cache = environment[FAST_CACHE_KEY]
+    for server in servers:
+        for port in ports:
+            mail_server = f'{server}:{port}'
+            # Avoid overwriting the cached data if someone
+            # else wrote it while we were running
+            if mail_server not in fast_cache:
+                fast_cache[mail_server] = {
+                    'supports_smtp': mail_server in smtp_results,
+                    'starttls': mail_server in starttls_results
+                }
 
 
 def to_rows(data):
-    row = []
-    for field in headers:
-        value = data[field]
-        row.append(value)
-
+    row = [data[field] for field in headers]
     return [row]
 
 

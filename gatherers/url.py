@@ -35,5 +35,4 @@ class Gatherer(Gatherer):
         else:
             remote_path = url
 
-        for domain in utils.load_domains(remote_path):
-            yield domain
+        yield from utils.load_domains(remote_path)

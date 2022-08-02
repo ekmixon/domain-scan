@@ -21,11 +21,7 @@ def get_default_values(parser):
 def get_args_with_mandatory_values(parser):
     # Get these from the parser rather than having to keep a manual list.
     optional_actions = parser._get_optional_actions()
-    mandatory_value_args = []
-    for oa in optional_actions:
-        if oa.nargs in ("?", "+", 1):
-            mandatory_value_args.append(oa.dest)
-    return mandatory_value_args
+    return [oa.dest for oa in optional_actions if oa.nargs in ("?", "+", 1)]
 
 
 gather_default_values = get_default_values(
@@ -282,10 +278,10 @@ def test_options_for_gather_arg_mismatch(monkeypatch, args):
 @pytest.mark.parametrize("arg", gather_args_with_mandatory_values)
 @pytest.mark.xfail(raises=argparse.ArgumentError)
 def test_options_for_gather_missing_mandatory(monkeypatch, arg):
-    command = "./gather censys --suffix=.gov --%s" % arg.replace("_", "-")
+    command = f'./gather censys --suffix=.gov --{arg.replace("_", "-")}'
     monkeypatch.setattr(sys, "argv", command.split(" "))
     subutils.options_for_gather()
-    command = "./gather censys --suffix=.gov --%s=" % arg.replace("_", "-")
+    command = f'./gather censys --suffix=.gov --{arg.replace("_", "-")}='
     monkeypatch.setattr(sys, "argv", command.split(" "))
     subutils.options_for_gather()
 
@@ -334,10 +330,10 @@ def test_options_for_scan_help(monkeypatch, capsys, args):
 @pytest.mark.parametrize("arg", scan_args_with_mandatory_values)
 @pytest.mark.xfail(raises=argparse.ArgumentError)
 def test_options_for_scan_missing_mandatory(monkeypatch, arg):
-    command = "./scan example.org --scan=a11y --%s" % arg.replace("_", "-")
+    command = f'./scan example.org --scan=a11y --{arg.replace("_", "-")}'
     monkeypatch.setattr(sys, "argv", command.split(" "))
     scan_utils.options()
-    command = "./scan example.org --scan=a11y --%s=" % arg.replace("_", "-")
+    command = f'./scan example.org --scan=a11y --{arg.replace("_", "-")}='
     monkeypatch.setattr(sys, "argv", command.split(" "))
     scan_utils.options()
 
@@ -379,6 +375,6 @@ def test_options_for_scan_lambda_profile_no_lambda(monkeypatch):
 def test_options_for_scan_check_for_single_args(monkeypatch, command, expected):
     monkeypatch.setattr(sys, "argv", command.split(" "))
     result, _ = scan_utils.options()
-    if not result == expected:
+    if result != expected:
         pytest.set_trace()
     assert result == expected

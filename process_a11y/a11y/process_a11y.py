@@ -108,13 +108,12 @@ class A11yProcessor(object):
                 'pages_count': pages,
                 'Average Errors per Page': (
                     'n/a' if pages == 0 else round(float(total_errors) / pages, 2)
-                )
-            }
-            # add in averages by error category
-            entry.update({
+                ),
+            } | {
                 e: round(mean([d['errorlist'][e] for d in domain_stats]), 2)
                 for e in self.ERRORS.values()
-            })
+            }
+
             results.append(entry)
 
         return {'data': results}
@@ -147,7 +146,7 @@ class A11yProcessor(object):
         with open(filename, 'r') as f:
             reader = csv.reader(f)
             next(reader)  # TODO: make header row skip configurable
-            return [row for row in reader]
+            return list(reader)
 
 
 if __name__ == '__main__':
