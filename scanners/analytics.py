@@ -60,17 +60,16 @@ def handle_scanner_args(args, opts) -> Tuple[dict, list]:
             utils.download(resource, str(analytics_path))
         except:
             logging.error(utils.format_last_exception())
-            no_csv = "--analytics URL %s not downloaded successfully." % resource
+            no_csv = f"--analytics URL {resource} not downloaded successfully."
             logging.error(no_csv)
             raise argparse.ArgumentTypeError(no_csv)
-    else:
-        if not os.path.exists(resource):
-            no_csv = "--analytics file %s not found." % resource
-            logging.error(no_csv)
-            raise FileNotFoundError(no_csv)
-        else:
-            analytics_path = resource
+    elif os.path.exists(resource):
+        analytics_path = resource
 
+    else:
+        no_csv = f"--analytics file {resource} not found."
+        logging.error(no_csv)
+        raise FileNotFoundError(no_csv)
     analytics_domains = utils.load_domains(analytics_path)
     dicted["analytics_domains"] = analytics_domains
     del dicted["analytics"]

@@ -60,12 +60,12 @@ def init_domain(domain, environment, options):
     # If we have pshtt data, skip domains which pshtt saw as not
     # supporting HTTPS at all.
     if utils.domain_doesnt_support_https(domain, cache_dir=cache_dir):
-        logging.warning('\tHTTPS not supported for {}'.format(domain))
+        logging.warning(f'\tHTTPS not supported for {domain}')
     else:
         # If we have pshtt data and it says canonical endpoint uses
         # www and the given domain is bare, add www.
         if utils.domain_uses_www(domain, cache_dir=cache_dir):
-            hostname = 'www.%s' % domain
+            hostname = f'www.{domain}'
         else:
             hostname = domain
 
@@ -94,7 +94,7 @@ def init_domain(domain, environment, options):
             cached_value = environment[FAST_CACHE_KEY].get(mail_server, None)
 
         if cached_value is None:
-            logging.debug('Adding {} to list to be scanned'.format(mail_server))
+            logging.debug(f'Adding {mail_server} to list to be scanned')
             hostname_and_port = mail_server.split(':')
             hosts_to_scan.append({
                 'hostname': hostname_and_port[0],
@@ -102,11 +102,11 @@ def init_domain(domain, environment, options):
                 'starttls_smtp': True
             })
         else:
-            logging.debug('Using cached data for {}'.format(mail_server))
+            logging.debug(f'Using cached data for {mail_server}')
             cached_data.append(cached_value)
 
     if not hosts_to_scan:
-        logging.warning('\tNo hosts to scan for {}'.format(domain))
+        logging.warning(f'\tNo hosts to scan for {domain}')
 
     return {
         'hosts_to_scan': hosts_to_scan,
@@ -190,8 +190,7 @@ def post_scan(domain: str, data: Any, environment: dict, options: dict):
         # Add the SMTP host results to the fast cache
         for record in data:
             if record['starttls_smtp']:
-                key = '{}:{}'.format(record['hostname'],
-                                     record['port'])
+                key = f"{record['hostname']}:{record['port']}"
                 # Avoid overwriting the cached data if someone
                 # else wrote it while we were running
                 if key not in fast_cache:
@@ -301,11 +300,7 @@ def run_sslyze(data, environment, options):
     # this default cannot be overridden.
     scan_method = environment.get("scan_method", "local")
 
-    if scan_method == "lambda":
-        sync = True
-    else:
-        sync = options.get("sslyze_serial", True)
-
+    sync = True if scan_method == "lambda" else options.get("sslyze_serial", True)
     # Initialize either a synchronous or concurrent scanner.
     server_info, scanner = init_sslyze(data['hostname'], data['port'], data['starttls_smtp'], options, sync=sync)
 

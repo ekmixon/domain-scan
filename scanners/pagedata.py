@@ -60,17 +60,18 @@ def init(environment: dict, options: dict) -> dict:
 #
 # Runs locally or in the cloud (Lambda).
 def scan(domain: str, environment: dict, options: dict) -> dict:
-    logging.debug("Scan function called with options: %s" % options)
+    logging.debug(f"Scan function called with options: {options}")
 
     results = {}
 
     # Perform the "task".
     for page in environment['pages']:
-        url = "https://" + domain + page
-        results[page] = {}
-        results[page]['opendata_conforms_to'] = ''
-        results[page]['codegov_measurementtype'] = ''
-        results[page]['json_items'] = str(0)
+        url = f"https://{domain}{page}"
+        results[page] = {
+            'opendata_conforms_to': '',
+            'codegov_measurementtype': '',
+            'json_items': str(0),
+        }
 
         headers = {
             'User-Agent': user_agent,
@@ -153,21 +154,25 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
 
                 # check for "chief data officer"
                 try:
-                    res = re.findall(r'chief data officer', response.text, flags=re.IGNORECASE)
-                    if res:
-                        results[page]['contains_chiefdataofficer'] = True
-                    else:
-                        results[page]['contains_chiefdataofficer'] = False
+                    results[page]['contains_chiefdataofficer'] = bool(
+                        res := re.findall(
+                            r'chief data officer',
+                            response.text,
+                            flags=re.IGNORECASE,
+                        )
+                    )
+
                 except Exception:
                     results[page]['contains_chiefdataofficer'] = False
 
                 # check for "Charter"
                 try:
-                    res = re.findall(r'Charter', response.text, flags=re.IGNORECASE)
-                    if res:
-                        results[page]['contains_charter'] = True
-                    else:
-                        results[page]['contains_charter'] = False
+                    results[page]['contains_charter'] = bool(
+                        res := re.findall(
+                            r'Charter', response.text, flags=re.IGNORECASE
+                        )
+                    )
+
                 except Exception:
                     results[page]['contains_charter'] = False
             except Exception:
@@ -175,7 +180,12 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
 
         logging.debug('memory usage after page %s: %d', url, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
 
-    logging.debug('memory usage for pagedata %s: %d', "https://" + domain, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    logging.debug(
+        'memory usage for pagedata %s: %d',
+        f"https://{domain}",
+        resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+    )
+
     logging.warning("pagedata %s Complete!", domain)
 
     return results

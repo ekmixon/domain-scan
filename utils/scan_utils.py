@@ -55,18 +55,18 @@ def format_datetime(obj) -> Union[str, None]:
 # Cut off floating point errors, always output duration down to
 # microseconds.
 def just_microseconds(duration: float) -> str:
-    if duration is None:
-        return None
-    return "%.6f" % duration
+    return None if duration is None else "%.6f" % duration
 
 
 # RFC 3339 timestamp for a given UTC time.
 # seconds can be a float, down to microseconds.
 # A given time needs to be passed in *as* UTC already.
 def utc_timestamp(seconds: Union[float, int]) -> Union[str, None]:
-    if not seconds:
-        return None
-    return strict_rfc3339.timestamp_to_rfc3339_utcoffset(seconds)
+    return (
+        strict_rfc3339.timestamp_to_rfc3339_utcoffset(seconds)
+        if seconds
+        else None
+    )
 # /Time Conveniences #
 
 
@@ -77,16 +77,12 @@ def mkdir_p(path: str) -> None:
     try:
         os.makedirs(path)
     except OSError as exc:  # Python >2.5
-        if exc.errno == errno.EEXIST:
-            pass
-        else:
+        if exc.errno != errno.EEXIST:
             raise
 
 
 def read(source):
-    with open(source) as f:
-        contents = f.read()
-    return contents
+    return Path(source).read_text()
 
 
 def write(content: Union[bytes, str], destination: str,
@@ -125,11 +121,10 @@ def scan(command: List[str], env: dict=None,
     except subprocess.CalledProcessError as exc:
         if exc.returncode in allowed_return_codes:
             return str(exc.stdout, encoding='UTF-8')
-        else:
-            logging.warning("Error running %s." % (str(command)))
-            logging.warning("Error running %s." % (str(exc.output)))
-            logging.warning(format_last_exception())
-            return None
+        logging.warning(f"Error running {command}.")
+        logging.warning(f"Error running {str(exc.output)}.")
+        logging.warning(format_last_exception())
+        return None
 
 
 # test if a command exists, don't print output
@@ -141,7 +136,7 @@ def try_command(command):
         return True
     except subprocess.CalledProcessError:
         logging.warning(format_last_exception())
-        logging.warning("No command found: %s" % (str(command)))
+        logging.warning(f"No command found: {str(command)}")
         return False
 # /Command Line Conveniences #
 
@@ -160,7 +155,7 @@ def from_json(string):
 
 # Logging Conveniences #
 def configure_logging(options: Union[dict, None]=None) -> None:
-    options = {} if not options else options
+    options = options or {}
     if options.get('debug', False):
         log_level = "debug"
     else:
@@ -180,41 +175,39 @@ def configure_logging(options: Union[dict, None]=None) -> None:
 # This loads the whole thing into memory: it's not a great solution for
 # super-large lists of domains.
 def sort_csv(input_filename):
-    logging.warning("Sorting %s..." % input_filename)
+    logging.warning(f"Sorting {input_filename}...")
 
-    input_file = open(input_filename, encoding='utf-8', newline='')
-    tmp_filename = "%s.tmp" % input_filename
-    tmp_file = open(tmp_filename, 'w', newline='')
-    tmp_writer = csv.writer(tmp_file)
+    with open(input_filename, encoding='utf-8', newline='') as input_file:
+        tmp_filename = f"{input_filename}.tmp"
+        tmp_file = open(tmp_filename, 'w', newline='')
+        tmp_writer = csv.writer(tmp_file)
 
-    # store list of domains, to sort at the end
-    domains = []
+        # store list of domains, to sort at the end
+        domains = []
 
-    # index rows by domain
-    rows = {}
-    header = None
+        # index rows by domain
+        rows = {}
+        header = None
 
-    for row in csv.reader(input_file):
-        # keep the header around
-        if (row[0].lower() == "domain"):
-            header = row
-            continue
+        for row in csv.reader(input_file):
+            # keep the header around
+            if (row[0].lower() == "domain"):
+                header = row
+                continue
 
-        # index domain for later reference
-        domain = row[0]
-        domains.append(domain)
-        rows[domain] = row
+            # index domain for later reference
+            domain = row[0]
+            domains.append(domain)
+            rows[domain] = row
 
-    # straight alphabet sort
-    domains.sort()
+        # straight alphabet sort
+        domains.sort()
 
-    # write out to a new file
-    tmp_writer.writerow(header)
-    for domain in domains:
-        tmp_writer.writerow(rows[domain])
+        # write out to a new file
+        tmp_writer.writerow(header)
+        for domain in domains:
+            tmp_writer.writerow(rows[domain])
 
-    # close the file handles
-    input_file.close()
     tmp_file.close()
 
     # replace the original
@@ -237,19 +230,27 @@ def write_rows(rows, domain, base_domain, scanner, csv_writer, meta={}):
     # If requested, add local and Lambda scan data.
     meta_fields = []
     if bool(meta):
-        meta_fields.append(" ".join(meta.get('errors', [])))
-        meta_fields.append(utc_timestamp(meta.get("start_time")))
-        meta_fields.append(utc_timestamp(meta.get("end_time")))
-        meta_fields.append(just_microseconds(meta.get("duration")))
+        meta_fields.extend(
+            (
+                " ".join(meta.get('errors', [])),
+                utc_timestamp(meta.get("start_time")),
+                utc_timestamp(meta.get("end_time")),
+                just_microseconds(meta.get("duration")),
+            )
+        )
 
         if meta.get("lambda") is not None:
-            meta_fields.append(meta['lambda'].get('request_id'))
-            meta_fields.append(meta['lambda'].get('log_group_name'))
-            meta_fields.append(meta['lambda'].get('log_stream_name'))
-            meta_fields.append(utc_timestamp(meta['lambda'].get('start_time')))
-            meta_fields.append(utc_timestamp(meta['lambda'].get('end_time')))
-            meta_fields.append(meta['lambda'].get('memory_limit'))
-            meta_fields.append(just_microseconds(meta['lambda'].get('measured_duration')))
+            meta_fields.extend(
+                (
+                    meta['lambda'].get('request_id'),
+                    meta['lambda'].get('log_group_name'),
+                    meta['lambda'].get('log_stream_name'),
+                    utc_timestamp(meta['lambda'].get('start_time')),
+                    utc_timestamp(meta['lambda'].get('end_time')),
+                    meta['lambda'].get('memory_limit'),
+                    just_microseconds(meta['lambda'].get('measured_duration')),
+                )
+            )
 
     # Write out prefix, scan data, and meta scan data.
     for row in rows:
@@ -264,21 +265,21 @@ def cache_single(filename, cache_dir="./cache"):
 
 # Predictable cache path for a domain and operation.
 def cache_path(domain, operation, ext="json", cache_dir="./cache"):
-    return os.path.join(cache_dir, operation, ("%s.%s" % (domain, ext)))
+    return os.path.join(cache_dir, operation, f"{domain}.{ext}")
 
 
 # Used to quickly get cached data for a domain.
 def data_for(domain, operation, cache_dir="./cache"):
     path = cache_path(domain, operation, cache_dir=cache_dir)
-    if os.path.exists(path):
-        raw = read(path)
-        data = json.loads(raw)
-        if isinstance(data, dict) and (data.get('invalid', False)):
-            return None
-        else:
-            return data
-    else:
+    if not os.path.exists(path):
         return {}
+    raw = read(path)
+    data = json.loads(raw)
+    return (
+        None
+        if isinstance(data, dict) and (data.get('invalid', False))
+        else data
+    )
 
 
 # marker for a cached invalid response
@@ -326,7 +327,7 @@ def load_suffix_list(cache_dir="./cache"):
             cache_file = publicsuffix.fetch()
         except URLError as err:
             logging.warning("Unable to download the Public Suffix List...")
-            logging.debug("{}".format(err))
+            logging.debug(f"{err}")
             return None, None
 
         content = cache_file.readlines()
@@ -362,8 +363,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 return action
 
     def error(self, message):
-        exc = sys.exc_info()[1]
-        if exc:
+        if exc := sys.exc_info()[1]:
             exc.argument = self._get_action_from_name(exc.argument_name)
             raise exc
         super(ArgumentParser, self).error(message)
@@ -545,7 +545,7 @@ def handle_scanner_arguments(scans: List[ModuleType], opts: dict, unknown: List[
     for scan in scans:
         if hasattr(scan, "handle_scanner_args"):
             scan_opts, unknown = scan.handle_scanner_args(unknown, opts)  # type: ignore
-            opts.update(scan_opts)
+            opts |= scan_opts
     return (opts, unknown)
 # /Argument Parsing #
 
@@ -560,16 +560,18 @@ def build_scanner_list(names: List[str],
 
     for name in names:
         try:
-            scan = importlib.import_module(
-                "%s.%s" % (mod, name))
+            scan = importlib.import_module(f"{mod}.{name}")
             verify_scanner_properties(scan)
         except ImportError:
             exc_type, exc_value, exc_traceback = sys.exc_info()
-            errmsg = "\n".join([
-                "[%s] Scanner not found, or had an error during loading." % name,
-                "\tERROR: %s" % exc_type,
-                "\t%s" % exc_value,
-            ])
+            errmsg = "\n".join(
+                [
+                    f"[{name}] Scanner not found, or had an error during loading.",
+                    "\tERROR: %s" % exc_type,
+                    "\t%s" % exc_value,
+                ]
+            )
+
             logging.error(errmsg)
             raise ImportError(errmsg)
 
@@ -582,12 +584,12 @@ def verify_scanner_properties(scanner: ModuleType) -> None:
     name = scanner.__name__
     for prop in MANDATORY_SCANNER_PROPERTIES:
         if not hasattr(scanner, prop):
-            raise ImportError("%s lacks required %s property" % (name, prop))
+            raise ImportError(f"{name} lacks required {prop} property")
 
     # If the scan has a canonical command, make sure it exists.
     # mypy doesn't handle optional properties well, it seems.
     if hasattr(scan, "command") and scan.command and (not try_command(scan.command)):  # type: ignore
-        errmsg = "[%s] Command not found: %s" % (name, scan.command)  # type: ignore
+        errmsg = f"[{name}] Command not found: {scan.command}"
         logging.error(errmsg)
         raise ImportError(errmsg)
 
@@ -619,7 +621,7 @@ def begin_csv_writing(scanner: ModuleType, options: dict,
     if meta and use_lambda:
         headers += LAMBDA_HEADERS
 
-    scanner_csv_path = Path(results_dir, "%s.csv" % name).resolve()
+    scanner_csv_path = Path(results_dir, f"{name}.csv").resolve()
     scanner_file = scanner_csv_path.open('w', newline='')
     scanner_writer = csv.writer(scanner_file)
 
@@ -666,8 +668,7 @@ def _df_str(arg: str, domain_suffix: Union[str, None]=None) -> Iterable[str]:
         errmsg = "Passing in domains at CLI not compatible with --suffix."
         raise argparse.ArgumentError(errmsg)
 
-    for x in arg.split(","):
-        yield x
+    yield from arg.split(",")
 
 
 @domains_from.register(Path)
@@ -682,18 +683,21 @@ def _df_path(arg: Path, domain_suffix: Union[str, None]=None) -> Iterable[str]:
                     sep = "."
                     if domain_suffix.startswith("."):
                         sep = ""
-                    yield "%s%s%s" % (domain, sep, domain_suffix)
+                    yield f"{domain}{sep}{domain_suffix}"
                 else:
                     yield domain
     else:
         # Note: the path referred to below will be the path to the local cached
         # download and not to the original URL. It shouldn't be possible to get
         # here with that being a problem, but noting it anyway.
-        msg = "\n".join([
-            "Domains should be specified as a comma-separated list ",
-            "or as the URL or path to a .csv file. ",
-            "%s does not appear to be any of those." % arg
-        ])
+        msg = "\n".join(
+            [
+                "Domains should be specified as a comma-separated list ",
+                "or as the URL or path to a .csv file. ",
+                f"{arg} does not appear to be any of those.",
+            ]
+        )
+
         raise TypeError(msg)
 
 
@@ -725,11 +729,14 @@ def handle_domains_argument(domains: str, cache_dir: Path) -> Union[Path, str]:
                 raise FileNotFoundError
             return domains_path
         except FileNotFoundError as err:
-            msg = "\n".join([
-                "Domains CSV file not found.",
-                "(Curdir: %s CSV file: %s)" % (os.path.curdir, domains),
-                str(err),
-            ])
+            msg = "\n".join(
+                [
+                    "Domains CSV file not found.",
+                    f"(Curdir: {os.path.curdir} CSV file: {domains})",
+                    str(err),
+                ]
+            )
+
             logging.error(msg)
             raise FileNotFoundError(msg)
     return domains

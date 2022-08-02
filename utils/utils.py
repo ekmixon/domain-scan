@@ -28,17 +28,17 @@ suffix_list = None
 # seconds can be a float, down to microseconds.
 # A given time needs to be passed in *as* UTC already.
 def utc_timestamp(seconds):
-    if not seconds:
-        return None
-    return strict_rfc3339.timestamp_to_rfc3339_utcoffset(seconds)
+    return (
+        strict_rfc3339.timestamp_to_rfc3339_utcoffset(seconds)
+        if seconds
+        else None
+    )
 
 
 # Cut off floating point errors, always output duration down to
 # microseconds.
 def just_microseconds(duration: float) -> str:
-    if duration is None:
-        return None
-    return "%.6f" % duration
+    return None if duration is None else "%.6f" % duration
 
 
 def format_datetime(obj):
@@ -74,7 +74,7 @@ def download(url, destination):
 
     # If it's a gzipped file, ungzip it and replace it
     if headers.get("Content-Encoding") == "gzip":
-        unzipped_file = filename + ".unzipped"
+        unzipped_file = f"{filename}.unzipped"
 
         with gzip.GzipFile(filename, 'rb') as inf:
             with open(unzipped_file, 'w') as outf:
@@ -122,8 +122,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 return action
 
     def error(self, message):
-        exc = sys.exc_info()[1]
-        if exc:
+        if exc := sys.exc_info()[1]:
             exc.argument = self._get_action_from_name(exc.argument_name)
             raise exc
         super(ArgumentParser, self).error(message)
@@ -162,7 +161,7 @@ def build_gather_options_parser(services):
     parser = ArgumentParser(prefix_chars="--", usage=usage_message)
 
     for service in services:
-        parser.add_argument("--%s" % service, nargs=1, required=True)
+        parser.add_argument(f"--{service}", nargs=1, required=True)
 
     parser.add_argument("--cache", action="store_true",
                         help="Use local filesystem cache (censys only).")
@@ -287,7 +286,7 @@ def options_for_gather():
     # necessary lists here.
 
     def fix_suffix(suffix: str) -> str:
-        return suffix if suffix.startswith(".") else ".%s" % suffix
+        return suffix if suffix.startswith(".") else f".{suffix}"
 
     opts["suffix"] = [fix_suffix(s.strip()) for s in opts["suffix"].split(",")
                       if s.strip()]
@@ -295,7 +294,7 @@ def options_for_gather():
 
 
 def configure_logging(options=None):
-    options = {} if not options else options
+    options = options or {}
     if options.get('debug', False):
         log_level = "debug"
     else:
@@ -333,9 +332,7 @@ def mkdir_p(path):
     try:
         os.makedirs(path)
     except OSError as exc:  # Python >2.5
-        if exc.errno == errno.EEXIST:
-            pass
-        else:
+        if exc.errno != errno.EEXIST:
             raise
 
 
@@ -412,7 +409,7 @@ def try_command(command):
         return True
     except subprocess.CalledProcessError:
         logging.warning(format_last_exception())
-        logging.warning("No command found: %s" % (str(command)))
+        logging.warning(f"No command found: {str(command)}")
         return False
 
 
@@ -427,11 +424,10 @@ def scan(command, env=None, allowed_return_codes=[]):
     except subprocess.CalledProcessError as exc:
         if exc.returncode in allowed_return_codes:
             return str(exc.stdout, encoding='UTF-8')
-        else:
-            logging.warning("Error running %s." % (str(command)))
-            logging.warning("Error running %s." % (str(exc.output)))
-            logging.warning(format_last_exception())
-            return None
+        logging.warning(f"Error running {str(command)}.")
+        logging.warning(f"Error running {str(exc.output)}.")
+        logging.warning(format_last_exception())
+        return None
 
 # Turn shell on, when shell=False won't work.
 
@@ -441,14 +437,14 @@ def unsafe_execute(command):
         response = subprocess.check_output(command, shell=True)
         return str(response, encoding='UTF-8')
     except subprocess.CalledProcessError:
-        logging.warning("Error running %s." % (str(command)))
+        logging.warning(f"Error running {str(command)}.")
         return None
 
 # Predictable cache path for a domain and operation.
 
 
 def cache_path(domain, operation, ext="json", cache_dir="./cache"):
-    return os.path.join(cache_dir, operation, ("%s.%s" % (domain, ext)))
+    return os.path.join(cache_dir, operation, f"{domain}.{ext}")
 
 
 # cache a single one-off file, not associated with a domain or operation
@@ -459,15 +455,15 @@ def cache_single(filename, cache_dir="./cache"):
 # Used to quickly get cached data for a domain.
 def data_for(domain, operation, cache_dir="./cache"):
     path = cache_path(domain, operation, cache_dir=cache_dir)
-    if os.path.exists(path):
-        raw = read(path)
-        data = json.loads(raw)
-        if isinstance(data, dict) and (data.get('invalid', False)):
-            return None
-        else:
-            return data
-    else:
+    if not os.path.exists(path):
         return {}
+    raw = read(path)
+    data = json.loads(raw)
+    return (
+        None
+        if isinstance(data, dict) and (data.get('invalid', False))
+        else data
+    )
 
 
 # marker for a cached invalid response
@@ -525,7 +521,7 @@ def load_suffix_list(cache_dir="./cache"):
             cache_file = publicsuffix.fetch()
         except URLError as err:
             logging.warning("Unable to download the Public Suffix List...")
-            logging.debug("{}".format(err))
+            logging.debug(f"{err}")
             return None, None
 
         content = cache_file.readlines()
@@ -585,10 +581,8 @@ def domain_uses_www(domain, cache_dir="./cache"):
 
 def domain_mail_servers_that_support_starttls(domain, cache_dir="./cache"):
     retVal = []
-    data = data_for(domain, 'trustymail', cache_dir=cache_dir)
-    if data:
-        starttls_results = data.get('Domain Supports STARTTLS Results')
-        if starttls_results:
+    if data := data_for(domain, 'trustymail', cache_dir=cache_dir):
+        if starttls_results := data.get('Domain Supports STARTTLS Results'):
             retVal = starttls_results.split(', ')
 
     return retVal
@@ -600,10 +594,7 @@ def domain_mail_servers_that_support_starttls(domain, cache_dir="./cache"):
 def domain_not_live(domain, cache_dir="./cache"):
     # Make sure we have the data.
     inspection = data_for(domain, "pshtt", cache_dir=cache_dir)
-    if not inspection:
-        return False
-
-    return (not inspection.get("Live"))
+    return (not inspection.get("Live")) if inspection else False
 
 
 # Check whether we have HTTP behavior data cached for a domain.
@@ -612,10 +603,7 @@ def domain_not_live(domain, cache_dir="./cache"):
 def domain_is_redirect(domain, cache_dir="./cache"):
     # Make sure we have the data.
     inspection = data_for(domain, "pshtt", cache_dir=cache_dir)
-    if not inspection:
-        return False
-
-    return (inspection.get("Redirect") is True)
+    return (inspection.get("Redirect") is True) if inspection else False
 
 
 # Check whether we have HTTP behavior data cached for a domain.
@@ -624,10 +612,7 @@ def domain_is_redirect(domain, cache_dir="./cache"):
 def domain_canonical(domain, cache_dir="./cache"):
     # Make sure we have the data.
     inspection = data_for(domain, "pshtt", cache_dir=cache_dir)
-    if not inspection:
-        return False
-
-    return (inspection.get("Canonical URL"))
+    return (inspection.get("Canonical URL")) if inspection else False
 
 
 # Load the first column of a CSV into memory as an array of strings.
@@ -642,7 +627,7 @@ def load_domains(domain_csv, whole_rows=False):
             row[0] = row[0].lower()
 
             # Skip any header row.
-            if (not domains) and ((row[0] == "domain") or (row[0] == "domain name")):
+            if not domains and row[0] in ["domain", "domain name"]:
                 continue
 
             if whole_rows:
@@ -656,41 +641,39 @@ def load_domains(domain_csv, whole_rows=False):
 # This loads the whole thing into memory: it's not a great solution for
 # super-large lists of domains.
 def sort_csv(input_filename):
-    logging.warning("Sorting %s..." % input_filename)
+    logging.warning(f"Sorting {input_filename}...")
 
-    input_file = open(input_filename, encoding='utf-8', newline='')
-    tmp_filename = "%s.tmp" % input_filename
-    tmp_file = open(tmp_filename, 'w', newline='')
-    tmp_writer = csv.writer(tmp_file)
+    with open(input_filename, encoding='utf-8', newline='') as input_file:
+        tmp_filename = f"{input_filename}.tmp"
+        tmp_file = open(tmp_filename, 'w', newline='')
+        tmp_writer = csv.writer(tmp_file)
 
-    # store list of domains, to sort at the end
-    domains = []
+        # store list of domains, to sort at the end
+        domains = []
 
-    # index rows by domain
-    rows = {}
-    header = None
+        # index rows by domain
+        rows = {}
+        header = None
 
-    for row in csv.reader(input_file):
-        # keep the header around
-        if (row[0].lower() == "domain"):
-            header = row
-            continue
+        for row in csv.reader(input_file):
+            # keep the header around
+            if (row[0].lower() == "domain"):
+                header = row
+                continue
 
-        # index domain for later reference
-        domain = row[0]
-        domains.append(domain)
-        rows[domain] = row
+            # index domain for later reference
+            domain = row[0]
+            domains.append(domain)
+            rows[domain] = row
 
-    # straight alphabet sort
-    domains.sort()
+        # straight alphabet sort
+        domains.sort()
 
-    # write out to a new file
-    tmp_writer.writerow(header)
-    for domain in domains:
-        tmp_writer.writerow(rows[domain])
+        # write out to a new file
+        tmp_writer.writerow(header)
+        for domain in domains:
+            tmp_writer.writerow(rows[domain])
 
-    # close the file handles
-    input_file.close()
     tmp_file.close()
 
     # replace the original
@@ -704,7 +687,7 @@ def sort_csv(input_filename):
 def suffix_pattern(suffixes):
     prefixed = [suffix.replace(".", "\\.") for suffix in suffixes]
     center = str.join("|", prefixed)
-    return re.compile("(?:%s)$" % center)
+    return re.compile(f"(?:{center})$")
 
 
 def flatten(iterable):

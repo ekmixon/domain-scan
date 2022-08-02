@@ -107,11 +107,7 @@ def scan(domain, environment, options):
 
 # Given a response from pshtt, convert it to a CSV row.
 def to_rows(data):
-    row = []
-    for field in headers:
-        value = data[field]
-        row.append(value)
-
+    row = [data[field] for field in headers]
     return [row]
 
 

@@ -20,7 +20,7 @@ class Scanner(ScannerABC):
         # Per-domain arguments should be passed to ``.scan()``.
         #
         # Run locally.
-        logging.debug("Subclass (%s) __init__ method." % self.__module__)
+        logging.debug(f"Subclass ({self.__module__}) __init__ method.")
         logging.debug("Initialize environment method.")
         self.initialized_opts = environment
         self.initialized_opts["constant"] = 12345
@@ -31,7 +31,7 @@ class Scanner(ScannerABC):
         # that use the network or are otherwise expensive would go.
         #
         # Runs locally or in the cloud (Lambda).
-        logging.debug("Scan function called with options: %s" % self.options)
+        logging.debug(f"Scan function called with options: {self.options}")
 
         # Perform the "task".
         complete = True

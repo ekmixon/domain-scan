@@ -32,7 +32,7 @@ def run(options=None, cache_dir="./cache", results_dir="./results"):
     suffix_pattern = utils.suffix_pattern(suffixes)
 
     # Clear out existing result CSVs, to avoid inconsistent data.
-    for result in glob.glob("%s/*.csv" % results_dir):
+    for result in glob.glob(f"{results_dir}/*.csv"):
         os.remove(result)
 
     # Opt in to include parent (second-level) domains.
@@ -54,8 +54,7 @@ def run(options=None, cache_dir="./cache", results_dir="./results"):
         extra = {}
 
         try:
-            gatherer_module = importlib.import_module(
-                "gatherers.%s" % source)
+            gatherer_module = importlib.import_module(f"gatherers.{source}")
             gatherer = gatherer_module.Gatherer(suffixes, options, extra)
         except ImportError:
             # If it's not a registered module, allow it to be "hot registered"
@@ -100,15 +99,12 @@ def run(options=None, cache_dir="./cache", results_dir="./results"):
             base = utils.base_domain_for(domain)
 
             # Unless --include-parents is specified, exclude them.
-            if not include_parents:
-                # Always ignore www prefixes for base domains.
-                if (domain == base) or (domain == "www.%s" % base):
-                    continue
+            if not include_parents and domain in [base, f"www.{base}"]:
+                continue
 
             # Apply --parent domain whitelist, if present.
-            if parents:
-                if base not in parents:
-                    continue
+            if parents and base not in parents:
+                continue
 
             # Use hostname cache to de-dupe, if seen before.
             if domain not in hostnames_cache:
@@ -126,24 +122,18 @@ def run(options=None, cache_dir="./cache", results_dir="./results"):
     headers += sources
 
     # Open CSV file.
-    gathered_filename = "%s/%s.csv" % (results_dir, "gathered")
-    gathered_file = open(gathered_filename, 'w', newline='')
-    gathered_writer = csv.writer(gathered_file)
-    gathered_writer.writerow(headers)
+    gathered_filename = f"{results_dir}/gathered.csv"
+    with open(gathered_filename, 'w', newline='') as gathered_file:
+        gathered_writer = csv.writer(gathered_file)
+        gathered_writer.writerow(headers)
 
-    # Write each hostname to disk, with all discovered sources.
-    hostnames = list(hostnames_cache.keys())
-    hostnames.sort()
-
-    for hostname in hostnames:
-        base = utils.base_domain_for(hostname)
-        row = [hostname, base]
-        for source in sources:
-            row += [source in hostnames_cache[hostname]]
-        gathered_writer.writerow(row)
-
-    # Close CSV file.
-    gathered_file.close()
+        hostnames = sorted(hostnames_cache.keys())
+        for hostname in hostnames:
+            base = utils.base_domain_for(hostname)
+            row = [hostname, base]
+            for source in sources:
+                row += [source in hostnames_cache[hostname]]
+            gathered_writer.writerow(row)
 
     # If sort requested, sort in place by domain.
     if options.get("sort"):
@@ -158,7 +148,7 @@ def run(options=None, cache_dir="./cache", results_dir="./results"):
         'end_time': utils.utc_timestamp(end_time),
         'command': start_command
     }
-    utils.write(utils.json_for(metadata), "%s/meta.json" % results_dir)
+    utils.write(utils.json_for(metadata), f"{results_dir}/meta.json")
 
 
 # Read in parent domains from the first column of a given CSV.
@@ -186,10 +176,13 @@ def get_parent_domains(options, cache_dir="./cache"):
 
     parent_domains = []
     with open(parents, encoding='utf-8', newline='') as csvfile:
-        for row in csv.reader(csvfile):
-            if (not row[0]) or (row[0].lower() == "domain") or (row[0].lower() == "domain name"):
-                continue
-            parent_domains.append(row[0].lower())
+        parent_domains.extend(
+            row[0].lower()
+            for row in csv.reader(csvfile)
+            if row[0]
+            and row[0].lower() != "domain"
+            and row[0].lower() != "domain name"
+        )
 
     return parent_domains
 

@@ -31,10 +31,10 @@ workers = 50
 # that use the network or are otherwise expensive would go.
 # Runs locally or in the cloud (Lambda).
 def scan(domain: str, environment: dict, options: dict) -> dict:
-    logging.debug("Scan function called with options: %s" % options)
+    logging.debug(f"Scan function called with options: {options}")
 
     sitemap = None
-    fqd = "https://%s" % domain  # note lack of trailing slash
+    fqd = f"https://{domain}"
     results = {
         'status_code': None,
         'final_url': None,
@@ -48,11 +48,14 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
 
     # get status_code and final_url for sitemap.xml
     try:
-        sitemap = requests.get(fqd + '/sitemap.xml', timeout=4)
+        sitemap = requests.get(f'{fqd}/sitemap.xml', timeout=4)
         results['status_code'] = sitemap.status_code
         results['final_url'] = sitemap.url
     except Exception as error:
-        results['status_code'] = "Could not get data from %s/sitemap.xml: %s" % (domain, error)
+        results[
+            'status_code'
+        ] = f"Could not get data from {domain}/sitemap.xml: {error}"
+
 
     # Check once more that we have a usable sitemap before parsing it
     if sitemap and sitemap.status_code == HTTPStatus.OK:
@@ -70,23 +73,16 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
     # when we have Python 3.8 RobotFileParser may be a better option than regex for this.
     # But it can be kinda funky, too.
     try:
-        robots = requests.get(fqd + '/sitemap.xml', timeout=4)
+        robots = requests.get(f'{fqd}/sitemap.xml', timeout=4)
         if robots and robots.status_code == HTTPStatus.OK:
             results['robots'] = 'OK'
-            # now read it. Note we have seen cases where a site is defining
-            # crawl delay more than once or are declaring different crawl
-            # delays per user agent. We are only grabbing the first instance.
-            # Subsequent declarations are ignored. This could lead to incorrect
-            # results and should be double-checked if the crawl delay is particularly
-            # critical to you. For our purposes, simply grabbing the first is Good Enough.
-            cd = re.findall('[cC]rawl-[dD]elay: (.*)', robots.text)
-            if cd:
+            if cd := re.findall('[cC]rawl-[dD]elay: (.*)', robots.text):
                 results['crawl_delay'] = cd[0]
             results['sitemap_locations_from_robotstxt'] = re.findall('[sS]itemap: (.*)', robots.text)
         else:
             results['robots'] = robots.status_code
     except Exception as error:
-        logging.warning("Error parsing robots.txt for %s: %s" % (fqd, error))
+        logging.warning(f"Error parsing robots.txt for {fqd}: {error}")
 
     logging.warning("sitemap %s Complete!", domain)
     return results

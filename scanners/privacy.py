@@ -22,10 +22,10 @@ def mergelists(a, b):
 #
 # Runs locally or in the cloud (Lambda).
 def scan(domain: str, environment: dict, options: dict) -> dict:
-    logging.debug("Scan function called with options: %s" % options)
+    logging.debug(f"Scan function called with options: {options}")
 
     results = {}
-    url = 'https://' + domain + '/privacy'
+    url = f'https://{domain}/privacy'
 
     # get status_code for /privacy
     try:
@@ -41,10 +41,9 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
     results['emails'] = []
     try:
         with urllib.request.urlopen(url, timeout=5) as privacypage:
-            for _, line in enumerate(privacypage):
+            for line in privacypage:
                 line = line.decode().rstrip()
-                emails = re.findall('<a href="mailto:(.*?)"', line)
-                if emails:
+                if emails := re.findall('<a href="mailto:(.*?)"', line):
                     results['emails'] = mergelists(emails, results['emails'])
     except Exception:
         logging.debug('error while trying to retrieve emails from %s', url)
@@ -55,7 +54,7 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
     results['h3'] = []
     try:
         with urllib.request.urlopen(url, timeout=5) as privacypage:
-            for _, line in enumerate(privacypage):
+            for line in privacypage:
                 line = line.decode().rstrip()
                 h1s = re.findall('<h1>(.*)</h1>', line)
                 h2s = re.findall('<h2>(.*)</h2>', line)

@@ -50,7 +50,7 @@ def init(environment: dict, options: dict) -> dict:
 #
 # Runs locally or in the cloud (Lambda).
 def scan(domain: str, environment: dict, options: dict) -> dict:
-    logging.debug("Scan function called with options: %s" % options)
+    logging.debug(f"Scan function called with options: {options}")
 
     results = {}
 
@@ -58,7 +58,10 @@ def scan(domain: str, environment: dict, options: dict) -> dict:
     for page in environment['pages']:
         results[page] = {}
         try:
-            response = requests.head("https://" + domain + page, allow_redirects=True, timeout=4)
+            response = requests.head(
+                f"https://{domain}{page}", allow_redirects=True, timeout=4
+            )
+
             results[page] = str(response.status_code)
         except Exception:
             logging.debug("could not get data from %s%s", domain, page)

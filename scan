@@ -144,7 +144,7 @@ def scan_domains(scanners: List[ModuleType], domains: Path,
     durations = {}
     scan_uuid = str(uuid.uuid4())
     # Store scan UUID.
-    logging.debug("[%s] Scan UUID." % scan_uuid)
+    logging.debug(f"[{scan_uuid}] Scan UUID.")
     for scanner in scanners:
         name = scanner.__name__.split(".")[-1]  # e.g. 'pshtt'
 
@@ -171,8 +171,10 @@ def scan_domains(scanners: List[ModuleType], domains: Path,
             init = scanner.init(environment, options)  # type: ignore
             # If a scanner's init() function returns false, stop entirely.
             if init is False:
-                logging.warning("[%s] Scanner init function returned false!  Bailing."
-                             % handles[name]['name'])
+                logging.warning(
+                    f"[{handles[name]['name']}] Scanner init function returned false!  Bailing."
+                )
+
                 exit(1)
 
             if type(init) is dict:
@@ -236,7 +238,7 @@ def scan_domains(scanners: List[ModuleType], domains: Path,
         'command': start_command,
         'scan_uuid': scan_uuid
     }
-    scan_utils.write(scan_utils.json_for(metadata), "%s/meta.json" % results_dir)
+    scan_utils.write(scan_utils.json_for(metadata), f"{results_dir}/meta.json")
 
 
 def copy_environment(env: dict) -> dict:
@@ -282,7 +284,7 @@ def perform_scan(params: Tuple[Any, str, dict, dict, dict]):
     assert name == handles[name]['name']  # Sanity check
 
     try:
-        logging.warning("[%s][%s] Running scan..." % (domain, name))
+        logging.warning(f"[{domain}][{name}] Running scan...")
 
         data = None
 
@@ -345,7 +347,7 @@ def perform_scan(params: Tuple[Any, str, dict, dict, dict]):
 
     except:
         exception = scan_utils.format_last_exception()
-        meta['errors'].append("Unknown exception: %s" % exception)
+        meta['errors'].append(f"Unknown exception: {exception}")
 
     try:
         # Always print errors.
@@ -415,16 +417,18 @@ def perform_lambda_scan(scanner, domain, handles, environment, options, meta, pr
         meta['lambda'] = {
             'retries': 0
         }
+    elif meta['lambda']['retries'] < max_lambda_retries:
+        meta['lambda']['retries'] = meta['lambda']['retries'] + 1
+        logging.info(
+            f"Attempting retry number {meta['lambda']['retries']} for {domain}"
+        )
+
     else:
-        if meta['lambda']['retries'] < max_lambda_retries:
-            meta['lambda']['retries'] = meta['lambda']['retries'] + 1
-            logging.info('Attempting retry number {} for {}'.format(meta['lambda']['retries'], domain))
-        else:
-            logging.warn('No more retries for {}'.format(domain))
-            return previousData
+        logging.warn(f'No more retries for {domain}')
+        return previousData
 
     task_prefix = "task_"  # default, maybe make optional later
-    task_name = "%s%s" % (task_prefix, scanner_name)
+    task_name = f"{task_prefix}{scanner_name}"
 
     # JSON payload that arrives as the 'event' object in Lambda.
     payload = {
@@ -455,12 +459,11 @@ def perform_lambda_scan(scanner, domain, handles, environment, options, meta, pr
         raw = str(api_response['Payload'].read(), encoding='utf-8')
 
         response = json.loads(raw)
-        logging.debug('Response is: {}'.format(response))
+        logging.debug(f'Response is: {response}')
 
         if response is None:
             meta['errors'].append("Response came back empty. Raw payload response:\n%s\nFull api_response:\n%s" % (raw, api_response))
             retry = True
-        # An errorMessage field implies a Lambda-level error.
         elif response.get("errorMessage") is None:
             # Payload has some per-task Lambda-specific info.
             meta['lambda'] = {**meta['lambda'], **response['lambda']}
@@ -474,22 +477,24 @@ def perform_lambda_scan(scanner, domain, handles, environment, options, meta, pr
 
             # An error field implies an exception during the scan.
             if 'error' in response:
-                meta['errors'].append("Error or exception during scan: %s" % response['error'])
+                meta['errors'].append(f"Error or exception during scan: {response['error']}")
                 retry = True
 
         else:
-            meta['errors'].append("Lambda error: %s" % raw)
+            meta['errors'].append(f"Lambda error: {raw}")
             retry = True
 
     except botocore.vendored.requests.exceptions.ReadTimeout:
         meta['errors'].append("Connection timeout while talking to Lambda.")
         retry = True
 
-    if not retry:
-        return data
-    else:
-        # Retry
-        return perform_lambda_scan(scanner, domain, handles, environment, options, meta, data)
+    return (
+        perform_lambda_scan(
+            scanner, domain, handles, environment, options, meta, data
+        )
+        if retry
+        else data
+    )
 
 
 # Given just a CSV with some Lambda detail headers at the end,
@@ -497,46 +502,44 @@ def perform_lambda_scan(scanner, domain, handles, environment, options, meta, pr
 # this function relatively stateless (only relying on info in the
 # Lambda detail fields) to make parallelization/refactoring easier.
 def add_lambda_details(input_filename, logs_client):
-    logging.warning("Fetching more Lambda details for %s..." % input_filename)
+    logging.warning(f"Fetching more Lambda details for {input_filename}...")
 
-    input_file = open(input_filename, encoding='utf-8', newline='')
-    tmp_filename = "%s.tmp" % input_filename
-    tmp_file = open(tmp_filename, 'w', newline='')
-    tmp_writer = csv.writer(tmp_file)
+    with open(input_filename, encoding='utf-8', newline='') as input_file:
+        tmp_filename = f"{input_filename}.tmp"
+        tmp_file = open(tmp_filename, 'w', newline='')
+        tmp_writer = csv.writer(tmp_file)
 
-    header = None
+        header = None
 
-    rows = []
+        rows = []
 
-    for row in csv.reader(input_file):
-        # keep header and add the Lambda detail headers
-        if (row[0].lower() == "domain"):
-            header = row
-            continue
+        for row in csv.reader(input_file):
+            # keep header and add the Lambda detail headers
+            if (row[0].lower() == "domain"):
+                header = row
+                continue
 
-        # Read the row into a dict, keyed by header name.
-        dict_row = {}
-        for i, cell in enumerate(row):
-            dict_row[header[i]] = cell
+                    # Read the row into a dict, keyed by header name.
+            dict_row = {header[i]: cell for i, cell in enumerate(row)}
+            logging.warning(
+                f"[{row[0]}][{input_filename}] Fetching Lambda details from logs..."
+            )
 
-        logging.warning("[%s][%s] Fetching Lambda details from logs..." % (row[0], input_filename))
-        details = fetch_lambda_details(dict_row, logs_client)
+            details = fetch_lambda_details(dict_row, logs_client)
 
-        # Matches order of LAMBDA_DETAIL_HEADERS
-        row.append(details.get('reported_duration'))
-        row.append(scan_utils.just_microseconds(details.get('log_delay')))
-        row.append(details.get('memory_used'))
-        row.append(details.get('errors'))
+            # Matches order of LAMBDA_DETAIL_HEADERS
+            row.append(details.get('reported_duration'))
+            row.append(scan_utils.just_microseconds(details.get('log_delay')))
+            row.append(details.get('memory_used'))
+            row.append(details.get('errors'))
 
-        rows.append(row)
+            rows.append(row)
 
-    # Write out headers, adding new fields.
-    tmp_writer.writerow(header + LAMBDA_DETAIL_HEADERS)
-    for row in rows:
-        tmp_writer.writerow(row)
+        # Write out headers, adding new fields.
+        tmp_writer.writerow(header + LAMBDA_DETAIL_HEADERS)
+        for row in rows:
+            tmp_writer.writerow(row)
 
-    # close the file handles
-    input_file.close()
     tmp_file.close()
 
     # replace the original
@@ -571,7 +574,7 @@ def fetch_lambda_details(dict_row, logs_client):
         return lambda_fields
     except:
         exception = scan_utils.format_last_exception()
-        lambda_fields['errors'] = ("Unknown exception: %s" % exception)
+        lambda_fields['errors'] = f"Unknown exception: {exception}"
         logging.warning(exception)
         return lambda_fields
 
